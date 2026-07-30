@@ -181,6 +181,8 @@ class TortureCommandProcessor(ClientCommandProcessor):
 
 
     def _cmd_torture_help(self):
+        """Use this command if you're struggling with how to use this"""
+
         logger.info("Check your browser!")
         webbrowser.open_new_tab("https://www.github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/help.md")
 
