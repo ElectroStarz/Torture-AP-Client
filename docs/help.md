@@ -21,7 +21,7 @@ ACCEPTED***
 ## Interfacing with the client
 As usual, you have every feature the text client has, just a normal client. Or is it? Like UT, you'll see there is a new
 tab in the top, "Torture Dashboard". It's recommended to have the client be larger than usual due to my poor kivy
-skills... But anyway, on the left you will see multiworld information. If you have any suggestions as to what should be
+skills... But anyway, on the left you will see server and player information. If you have any suggestions as to what should be
 there, please do say.
 
 On the right you will see a few boxes. The first 2 are to send a deathlink, with the text input being the reason and the
