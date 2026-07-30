@@ -159,7 +159,7 @@ class TortureCommandProcessor(ClientCommandProcessor):
     def __init__(self, ctx: "TortureClientContext"):
         super().__init__(ctx)
 
-    def _cmd_set_password(self, password: str = ""):
+    def _cmd_set_password(self, password: str):
         """Sets the torture client password"""
 
         if not password:
