@@ -1,4 +1,4 @@
-# --- Presets / Custom Widgets ---
+# --- Presets ---
 <Heading@Label>:
     font_size: '22sp'
     bold: True
@@ -9,110 +9,149 @@
     valign: 'top'
     text_size: self.size
 
+<Subheading@Label>:
+    font_size: '16sp'
+    bold: True
+    color: 0.7, 0.7, 0.9, 1
+    size_hint_y: None
+    height: '30dp'
+    halign: 'left'
+    valign: 'middle'
+    text_size: self.size
+
 <TortureDashboard>:
-    # Main container is vertical to hold the heading at the top
     orientation: 'vertical'
-    padding: 10
-    spacing: 10
 
-    Heading:
-        text: "Torture Dashboard"
+    # Allows entire window to be scrollable
+    ScrollView:
+        do_scroll_x: False
+        do_scroll_y: True
 
-    BoxLayout:
-        orientation: 'horizontal'
-        spacing: 20  # Space between the left and right columns
-
-        # --- LEFT COLUMN ---
+        # --- MAIN CONTAINER ---
         BoxLayout:
             orientation: 'vertical'
+            padding: 10
             spacing: 10
+            size_hint_y: None
+            height: self.minimum_height # Calculates height based on children
 
+            Heading:
+                text: "Torture Dashboard"
+
+            # --- TOP SECTION (Info and Actions) ---
+            BoxLayout:
+                orientation: 'horizontal'
+                spacing: 20
+                size_hint_y: None
+                height: '350dp'
+
+                # --- LEFT COLUMN ---
+                BoxLayout:
+                    orientation: 'vertical'
+                    spacing: 10
+
+                    Subheading:
+                        text: "Server Information"
+
+                    # Server Address
+                    Label:
+                        text: root.server_address_text
+                        font_size: '16sp'
+                        text_size: self.size
+                        halign: 'left'
+                        valign: 'top'
+                        size_hint_y: None
+                        height: '30dp'
+
+                    # Password Label
+                    Label:
+                        id: password_label
+                        text: root.password_text
+                        font_size: '16sp'
+                        size_hint_x: None
+                        width: self.texture_size[0]
+                        size_hint_y: None
+                        height: self.texture_size[1]
+
+                    # Remaining Room Stats
+                    Label:
+                        text: root.room_stats_text
+                        font_size: '16sp'
+                        text_size: self.size
+                        halign: 'left'
+                        valign: 'top'
+                        size_hint_y: None
+                        height: '60dp'
+
+                    Subheading:
+                        text: "Player Information"
+
+                    Label:
+                        text: root.player_info
+                        font_size: '16sp'
+                        text_size: self.size
+                        halign: 'left'
+                        valign: 'top'
+                        size_hint_y: None
+                        height: '150dp'
+
+                # --- RIGHT COLUMN ---
+                BoxLayout:
+                    orientation: 'vertical'
+                    spacing: 10
+
+                    Subheading:
+                        text: "Torture Players"
+
+                    Widget:
+                        size_hint_y: None
+                        height: '2dp'
+
+                    TextInput:
+                        id: deathlink_reason
+                        multiline: True
+                        size_hint_y: None
+                        height: '40dp'
+                        hint_text: "Deathlink Reason"
+
+                    Button:
+                        text: "Send Deathlink"
+                        size_hint_y: None
+                        height: '40dp'
+                        on_release: root.send_deathlink(deathlink_reason.text)
+
+                    TextInput:
+                        id: trap_send_amount
+                        size_hint_y: None
+                        height: '40dp'
+                        hint_text: "Number of people to send traps to"
+
+                    Button:
+                        text: "Send Traps"
+                        size_hint_y: None
+                        height: '40dp'
+                        on_release: root.btn_send_traps(trap_send_amount.text)
+
+                    Widget:
+                        size_hint_y: None
+                        height: '100dp'  # Pushes the buttons to the top
+
+            # --- TARGET PLAYERS SECTION ---
             Label:
-                text: "Multiworld Information"
+                text: "Target Players"
                 font_size: '16sp'
                 bold: True
-                color: 0.7, 0.7, 0.9, 1
-                size_hint_y: None
-                height: '30dp'
-                halign: 'left'
-                valign: 'middle'
-                text_size: self.size
-
-            Label:
-                text: "Room Information\n\n" + root.room_info
-                font_size: '16sp'
-                text_size: self.size
-                halign: 'left'
-                valign: 'top'
-                size_hint_y: None
-                height: '120dp'
-
-            Label:
-                text: "Player Information\n\n" + root.player_info
-                font_size: '16sp'
-                text_size: self.size
-                halign: 'left'
-                valign: 'top'
-                size_hint_y: None
-                height: '120dp'
-
-            Widget:
-                # Pushes everything in the left column to the top
-
-        # --- RIGHT COLUMN ---
-        BoxLayout:
-            orientation: 'vertical'
-            spacing: 10
-
-            # This empty widget acts as an invisible block to push the inputs
-            # down slightly so they align with "Room Information" instead of
-            # the "Multiworld Information" header.
-            Widget:
                 size_hint_y: None
                 height: '30dp'
 
-            TextInput:
-                id: deathlink_reason
-                multiline: True
+            ScrollView:
                 size_hint_y: None
-                height: '40dp'
-                hint_text: "Type a deathlink reason!"
+                height: '150dp'
 
-            Button:
-                text: "Send Deathlink"
-                size_hint_y: None
-                height: '40dp'
-                on_release: root.send_deathlink(deathlink_reason.text)
+                GridLayout:
+                    id: player_tg_checkbox_grid
+                    cols: 2
+                    spacing: 5
+                    size_hint_y: None
+                    height: self.minimum_height
 
-            TextInput:
-                id: trap_send_amount
-                size_hint_y: None
-                height: '40dp'
-                hint_text: "No. of people to send traps to (Leave empty if targeting!)"
-
-            Button:
-                text: "Send Traps"
-                size_hint_y: None
-                height: '40dp'
-                on_release: root.btn_send_traps(trap_send_amount.text)
-
-            Widget:
-                # Pushes everything in the right column to the top
-
-    Label:
-        text: "Target Players"
-        font_size: '16sp'
-        bold: True
-        size_hint_y: None
-        height: '30dp'
-
-    ScrollView:
-        size_hint_y: None
-        height: '150dp'
-
-        GridLayout:
-            id: player_checkbox_grid
-            cols: 2
-            spacing: 5
-            size_hint_y: None
-            height: self.minimum_height

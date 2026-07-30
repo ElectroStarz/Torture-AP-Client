@@ -1,17 +1,17 @@
+from kvui import GameManager
 import asyncio
 import logging
 import multiprocessing
 import os
 import random
 import sys
-from typing import Any
 import webbrowser
 
 from NetUtils import JSONMessagePart
-from kvui import GameManager
 from kivy.clock import Clock
 from kivy.lang import Builder
-from kivy.properties import StringProperty
+from kivy.core.window import Window
+from kivy.properties import StringProperty, BooleanProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.checkbox import CheckBox
@@ -22,181 +22,136 @@ from CommonClient import ClientCommandProcessor, CommonContext, get_base_parser,
 
 logger = logging.getLogger("Client")
 
+
 class TortureDashboard(BoxLayout):
-    room_info = StringProperty("Disconnected")
+    server_address_text = StringProperty("Server Address: Disconnected")
+    password_text = StringProperty("Server Password: ******")
+    room_stats_text = StringProperty("Player Count: Disconnected\nHint Cost: Disconnected")
     player_info = StringProperty("Disconnected")
+    show_password = BooleanProperty(False)
 
     def __init__(self, ctx: "TortureClientContext", **kwargs):
         super().__init__(**kwargs)
         self.ctx = ctx
-        self.selected_players = {}
+        self.selected_target_players = {}
         self._last_player_count = 0
+
+        # Track global mouse position to detect hovering
+        Window.bind(mouse_pos=self.on_mouse_pos)
+
         # Schedule the info updaters to run every 0.5 seconds
         Clock.schedule_interval(self.update_dashboard, 0.5)
 
+    def on_mouse_pos(self, window, pos):
+        if not self.get_root_window():
+            return
+
+        password_label = self.ids.get("password_label")
+        if password_label:
+            local_pos = password_label.to_widget(*pos)
+            is_hovering = password_label.collide_point(*local_pos)
+
+            if is_hovering != self.show_password:
+                self.show_password = is_hovering
+                self.update_password_display()
+
+    def update_password_display(self):
+        pwd = self.ctx.password if self.show_password else "******"
+        self.password_text = f"Server Password: {pwd}"
+
     def update_dashboard(self, dt):
-        if self.ctx.slot:
+        if self.ctx.is_ready():
             self.get_room_info()
             self.get_player_info()
 
             if len(self.ctx.player_names) != self._last_player_count:
-                self.populate_player_checkboxes()
+                self.populate_player_grid(self.ids.get("player_tg_checkbox_grid"), self.ctx.player_names)
                 self._last_player_count = len(self.ctx.player_names)
 
     def get_room_info(self):
-        if self.ctx.slot:
-            self.room_info = (f"Server Address: {self.ctx.server_address}\n"
-                              f"Player Count: {len(self.ctx.names)}\n"
-                              f"Hint Cost: {self.ctx.server_hint_cost}\n")
+        self.server_address_text = f"Server Address: {self.ctx.server_address}"
+        self.update_password_display()
+        self.room_stats_text = (f"Player Count: {len(self.ctx.names)}\n"
+                                f"Hint Cost: {self.ctx.hint_cost}")
 
     def get_player_info(self):
-        if self.ctx.slot:
-            self.player_info = (f"Player Names: {', '.join(self.ctx.names)}\n"
-                                f"Games: {', '.join(self.ctx.games)}\n")
+        self.player_info = (f"Player Names: {', '.join(self.ctx.names)}\n"
+                            f"Games: {', '.join(self.ctx.games)}\n")
 
-    def populate_player_checkboxes(self):
-        """Call this function when connected to the server/room."""
-        grid = self.ids.get("player_checkbox_grid")
+    def populate_all_checkboxes(self):
+        """Main function to call when connected to the server/room."""
 
+        target_grid = self.ids.get("player_tg_checkbox_grid")
+
+        # Clear selections
+        self.selected_target_players.clear()
+
+        if target_grid is not None:
+            self.populate_player_grid(target_grid, self.ctx.player_names)
+
+    def populate_player_grid(self, grid, player_dict: dict):
+        """Handles parsing dictionary data for targeting players."""
         if grid is None:
-            print(grid)
-            logger.info("Player Checkbox grid doesn't exist!")
             return
 
-        grid.clear_widgets()  # Clear old widgets from previous connections
-        self.selected_players.clear()
-
-        if not self.ctx or not hasattr(self.ctx, 'player_names'):
+        grid.clear_widgets()
+        if not player_dict:
             return
 
-        # Loop through players
-        for slot, name in self.ctx.player_names.items():
-            # Skip slots that aren't players
+        # Dictionary loops use .items() to get slot and name
+        for slot, name in player_dict.items():
             if name in ["Archipelago", self.ctx.get_torture_name()]:
                 continue
 
-            # Create Player Label
-            label = Label(
-                text=name,
-                halign='left',
-                valign='middle',
-                size_hint_y=None,
-                height='30dp'
-            )
-            label.bind(size=label.setter('text_size'))
+            self._create_checkbox_row(grid, display_text=name, identifier=slot, callback=self.on_player_target_toggled)
 
-            # Create Player Checkbox
-            checkbox = CheckBox(
-                active=False,
-                size_hint_x=None,
-                width='30dp',
-                size_hint_y=None,
-                height='30dp'
-            )
+    @staticmethod
+    def _create_checkbox_row(grid, display_text, identifier, callback):
+        """Helper function for Kivy widget generation"""
+        # Create Player/Game Label
+        label = Label(
+            text=display_text,
+            halign='left',
+            valign='middle',
+            size_hint_y=None,
+            height='30dp'
+        )
+        label.bind(size=label.setter('text_size'))
 
-            # Bind checkbox state changes to function using a lambda
-            checkbox.bind(
-                active=lambda instance, is_active, player_slot=slot:
-                self.on_player_toggled(player_slot, is_active)
-            )
+        # Create Checkbox
+        checkbox = CheckBox(
+            active=False,
+            size_hint_x=None,
+            width='30dp',
+            size_hint_y=None,
+            height='30dp'
+        )
 
-            # Add widgets to the grid
-            grid.add_widget(label)
-            grid.add_widget(checkbox)
+        # Bind checkbox state changes to the specific callback passed in
+        checkbox.bind(
+            active=lambda instance, is_active, passed_id=identifier:
+            callback(passed_id, is_active)
+        )
 
-    def on_player_toggled(self, slot_id: int, is_active: bool):
-        """Tracks which player checkboxes are currently active."""
+        # Add widgets to the grid
+        grid.add_widget(label)
+        grid.add_widget(checkbox)
+
+    def on_player_target_toggled(self, slot_id: int, is_active: bool):
+        """Tracks which target player checkboxes are currently active."""
         player_name = self.ctx.player_names.get(slot_id, f"Slot {slot_id}")
-        self.selected_players[player_name] = is_active
+        self.selected_target_players[player_name] = is_active
+        print(self.selected_target_players)
 
     def send_deathlink(self, reason: str):
-        if self.ctx.slot:
+        if self.ctx.is_ready():
             asyncio.create_task(self.ctx.send_death(reason))
 
     def btn_send_traps(self, amount: int | None = None):
-        asyncio.create_task(self.send_traps(amount))
+        if self.ctx.is_ready():
+            checked_players = [name for name, is_checked in self.selected_target_players.items() if is_checked]
+            asyncio.create_task(self.ctx.send_traps(checked_players, amount))
 
-    async def send_traps(self, amount: int | None = None):
-        amount = int(amount) if amount else None
-
-        if not self.ctx.slot:
-            return
-
-        checked_players = [name for name, is_checked in self.selected_players.items() if is_checked]
-
-        # Check if we're targeting anyone
-        if checked_players and amount is None:
-            players_chosen = checked_players
-
-        elif checked_players and amount is not None:
-            if amount > len(checked_players):
-                logger.info("Amount of people to trap is more than the amount you've targeted!")
-                return
-
-            players_chosen = random.sample(checked_players, amount)
-        else:
-            available_players = list(self.ctx.names)
-            if amount > len(available_players):
-                logger.info("Amount of people to trap is more than the amount of people in the multiworld!")
-                return
-
-            players_chosen = random.sample(available_players, amount)
-        traps_to_give = []
-
-        for player in players_chosen:
-            slot_num = next((k for k, v in self.ctx.player_names.items() if v == player), None)
-            if not slot_num:
-                continue
-
-            # Get the game this player is playing from slot_info
-            slot_data = self.ctx.slot_info.get(slot_num)
-            if not slot_data:
-                continue
-
-            game_name = slot_data.game
-
-            # Access the locally cached datapackage for their specific game
-            # self.ctx.datapackage is automatically populated by the CommonClient
-            if not self.ctx.datapackage:# or game_name not in self.ctx.datapackage:
-                logger.info(f"DataPackage for {game_name} not loaded.")
-                continue
-
-            game_items = self.ctx.datapackage["games"][game_name]["item_name_to_id"]
-
-            # Filter the items to find anything with "trap" in the name (case-insensitive)
-            trap_names = [name for name in game_items.keys() if "trap" in name.casefold()]
-
-            if not trap_names:
-                logger.info(f"No trap items found in the DataPackage for {game_name}.")
-                continue
-
-            # Pick a random trap from their game's pool
-            chosen_trap = random.choice(trap_names)
-            traps_to_give.append(chosen_trap)
-            #logger.info(f"Selected '{chosen_trap}' for {player}.")
-
-        logger.info("Sending traps to...")
-        for player, trap in zip(players_chosen, traps_to_give):
-            json_message: list[JSONMessagePart] = [
-                {"type": "color", "text": player, "color": "green"},
-                {"text": " <- "},
-                {"type": "color", "text": trap, "color": "salmon"}
-            ]
-
-            if self.ctx.ui is not None:
-                self.ctx.ui.print_json(json_message)
-
-        await asyncio.sleep(2)
-        message = f"Cursing {', '.join(players_chosen)}!"
-        asyncio.create_task(self.ctx.send_msgs([{"cmd": "Say", "text": message}]))
-        await asyncio.sleep(2)
-
-        for player, trap in zip(players_chosen, traps_to_give):
-            command = f"!admin /send {player} {trap}"
-            asyncio.create_task(self.ctx.send_msgs([{"cmd": "Say", "text": command}]))
-
-    def send_private_message(self, games:list[str]|None=None, slots:list[str]|None=None, tags:list[str]|None=None, data:str=""):
-        self.ctx.private_message(games, slots, tags, data)
 
 class TortureCommandProcessor(ClientCommandProcessor):
     ctx: "TortureClientContext"
@@ -204,9 +159,30 @@ class TortureCommandProcessor(ClientCommandProcessor):
     def __init__(self, ctx: "TortureClientContext"):
         super().__init__(ctx)
 
+    def _cmd_set_password(self, password: str = ""):
+        """Sets the torture client password"""
+
+        if not password:
+            logger.info("You must provide a password!")
+            return
+
+        # Store the password
+        self.ctx.torture_password = password
+        logger.info(f"Torture password successfully set to: {password}")
+
+        # Send your network packet here!
+        asyncio.create_task(self.ctx.send_msgs([{
+            "cmd": "Set",
+            "key": "torture_password",
+            "default": [],
+            "want_reply": False,
+            "operations": [{"operation": "replace", "value": password}]
+        }]))
+
+
     def _cmd_torture_help(self):
         logger.info("Check your browser!")
-        webbrowser.open_new_tab("https://www.github.com/ElectroStarz/Torture-AP-Client/docs/help.md")
+        webbrowser.open_new_tab("https://www.github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/help.md")
 
 
 class TortureClientContext(CommonContext):
@@ -214,17 +190,17 @@ class TortureClientContext(CommonContext):
     game = "Torture Client"
     games_present: list[str] = []
     dashboard: TortureDashboard
+    command_processor = TortureCommandProcessor
 
-    server_hint_cost: int = 0
     items_handling = 0b111
     want_slot_data = False
 
     def __init__(self, server_address: str | None = None, password: str | None = None) -> None:
         super().__init__(server_address, password)
-        self.dashboard = TortureDashboard(self)
-        self.names = {}
-        self.games = {}
+        self.names = set()
+        self.games = set()
         self.datapackage = {}
+        self.torture_password = None
 
     async def server_auth(self, password_requested: bool = False):
         if password_requested and not self.password:
@@ -238,18 +214,82 @@ class TortureClientContext(CommonContext):
             self.games = {v for v in self.games_present if v not in ["Archipelago", "Torture Client"]}
             self.load_datapackage(list(self.games))
 
+            # Ask the server for the password
+            asyncio.create_task(self.get_torture_password())
+
         elif cmd == "RoomInfo":
             self.games_present = args.get("games", "Disconnected")
-            self.server_hint_cost = args.get("hint_cost", 0)
 
         elif cmd == "DataPackage":
             self.datapackage = args.get("data")
 
 
+        elif cmd == "Retrieved":
+
+            if self.torture_password is not None:
+                return
+
+            keys_dict = args.get("keys", {})
+
+            if "torture_password" in keys_dict:
+                actual_password = keys_dict.get("torture_password")
+
+                if actual_password is None:
+                    # Password doesn't exist on the server yet
+                    asyncio.create_task(self.enforce_torture_password())
+                else:
+                    # Password exists, force the user to enter it
+                    asyncio.create_task(self.verify_torture_password(actual_password))
+
+    async def enforce_torture_password(self):
+        """Checks if the torture password exists, and prompts the user to create one."""
+
+        logger.info("Please enter a password for the Torture Client")
+        user_pass = await self.console_input()
+        self.torture_password = user_pass
+
+        # Send the network packet to save it to the server
+        await self.send_msgs([{
+            "cmd": "Set",
+            "key": "torture_password",
+            "default": [user_pass],
+            "want_reply": False,
+            "operations": [{"operation": "replace", "value": user_pass}]
+        }])
+        logger.info(f"Saved '{user_pass}' as password!")
+
+    async def verify_torture_password(self, actual_password: str):
+        """Prompts the user using the client's built-in console_input."""
+
+        while True:
+            logger.info("Please enter the password to gain access to the Torture Dashboard")
+            user_guess = await self.console_input()
+
+            # Check if the guess matches the real password
+            if user_guess == actual_password:
+                logger.info("Password accepted! Access granted.")
+                self.torture_password = actual_password
+
+                return True
+
+            else:
+                logger.info("Incorrect password. Please try again.")
+
+    async def get_torture_password(self):
+        await self.send_msgs([{
+            "cmd": "Get",
+            "keys": ["torture_password"]
+        }])
+
+    def is_ready(self):
+        if self.torture_password is not None:
+            return True
+        else:
+            return False
+
     async def disconnect(self, allow_autoreconnect: bool = False):
         self.names = {"Disconnected"}
         self.games = {"Disconnected"}
-        self.server_hint_cost = -1
         await super().disconnect(allow_autoreconnect)
 
     def make_gui(self):
@@ -279,28 +319,87 @@ class TortureClientContext(CommonContext):
     def load_datapackage(self, games: list):
         asyncio.create_task(self.send_msgs([{"cmd": "GetDataPackage", "games": games}]))
 
-    def private_message(self, games:list[str]|None=None, slots:list[str]|None=None, tags:list[str]|None=None, data:str=""):
+    async def send_traps(self, checked_players: list[str]|None = None, amount: int | None = None):
+        amount = int(amount) if amount else None
 
-        bounce_packet: dict[str, Any] = {
-            "cmd": "Bounce",
-            "data": data
-        }
-
-        if games:
-            bounce_packet["games"] = games
-        elif slots:
-            ids = []
-            for slot in slots:
-                slot_num = next((k for k, v in self.player_names.items() if v == slot), None)
-                ids.append(slot_num)
-            bounce_packet["slots"] = ids
-        elif tags:
-            bounce_packet["tags"] = tags
-        else:
+        if not self.slot:
             return
 
-        # Send the packet
-        asyncio.create_task(self.send_msgs([bounce_packet]))
+        # Check if we're targeting anyone and no input has been given
+        if checked_players and amount is None:
+            players_chosen = checked_players
+
+        # Targeting AND input has been give (choose random players that are selected)
+        elif checked_players and amount is not None:
+            if amount > len(checked_players):
+                logger.info("Amount of people to trap is more than the amount you've targeted!")
+                return
+
+            players_chosen = random.sample(checked_players, amount)
+        # None selected but input given, choose amount of players
+        elif amount is not None and not checked_players:
+            available_players = list(self.names)
+            if amount > len(available_players):
+                logger.info("Amount of people to trap is more than the amount of people in the multiworld!")
+                return
+
+            players_chosen = random.sample(available_players, amount)
+        else:
+            logger.info("Unable to send traps due to no input")
+            return
+
+        traps_to_give = []
+
+        for player in players_chosen:
+            slot_num = next((k for k, v in self.player_names.items() if v == player), None)
+            if not slot_num:
+                continue
+
+            # Get the game this player is playing from slot_info
+            slot_data = self.slot_info.get(slot_num)
+            if not slot_data:
+                continue
+
+            game_name = slot_data.game
+
+            # Access datapackage for their game
+            if not self.datapackage:
+                logger.info(f"DataPackage not loaded.")
+                continue
+
+            game_items = self.datapackage["games"][game_name]["item_name_to_id"]
+
+            # Filter the items to find anything with "trap" in the name (case-insensitive)
+            trap_names = [name for name in game_items.keys() if "trap" in name.casefold()]
+
+            if not trap_names:
+                logger.info(f"No trap items found in the DataPackage for {game_name}.")
+                continue
+
+            # Pick a random trap from their game's pool
+            chosen_trap = random.choice(trap_names)
+            traps_to_give.append(chosen_trap)
+            #logger.info(f"Selected '{chosen_trap}' for {player}.")
+
+        logger.info("Sending traps to...")
+        for player, trap in zip(players_chosen, traps_to_give):
+            json_message: list[JSONMessagePart] = [
+                {"type": "color", "text": player, "color": "green"},
+                {"text": " <- "},
+                {"type": "color", "text": trap, "color": "salmon"}
+            ]
+
+            if self.ui is not None:
+                self.ui.print_json(json_message)
+
+        await asyncio.sleep(2)
+        message = f"Cursing {', '.join(players_chosen[:len(players_chosen) - 1])} and {players_chosen[-1]}!"
+        asyncio.create_task(self.send_msgs([{"cmd": "Say", "text": message}]))
+        await asyncio.sleep(2)
+
+        for player, trap in zip(players_chosen, traps_to_give):
+            command = f"!admin /send {player} {trap}"
+            asyncio.create_task(self.send_msgs([{"cmd": "Say", "text": command}]))
 
 
 def launch_torture_client(*args):

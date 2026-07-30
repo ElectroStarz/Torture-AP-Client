@@ -17,11 +17,7 @@ components.append(
 
 
 class TortureWorld(World):
-    """Custom Built Dashboard for ElectroStarz's Torture Asyncs"""
+    """Custom Built Dashboard for ElectroStarz's Torture Asyncs and/or other people's enjoyment"""
     game = "Torture Client"
     item_name_to_id = {}
     location_name_to_id = {}
-
-    # @classmethod
-    # def stage_assert_generate(cls, multiworld):
-    #     raise Exception("Torture Client cannot be used for generating worlds, please remove the yaml.")
