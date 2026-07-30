@@ -166,11 +166,18 @@ class TortureCommandProcessor(ClientCommandProcessor):
             logger.info("You must provide a password!")
             return
 
+        if not self.ctx.slot_info or not self.ctx.slot:
+            logger.info("You must be connected to a room first!")
+            return
+
+        if not self.ctx.is_ready():
+            logger.info("Please enter the torture password first before using /set_password")
+            return
+
         # Store the password
         self.ctx.torture_password = password
         logger.info(f"Torture password successfully set to: {password}")
 
-        # Send your network packet here!
         asyncio.create_task(self.ctx.send_msgs([{
             "cmd": "Set",
             "key": "torture_password",
