@@ -229,6 +229,7 @@ class TortureClientContext(CommonContext):
         elif cmd == "RoomInfo":
             self.games_present = args.get("games", "Disconnected")
 
+
         elif cmd == "DataPackage":
             self.datapackage = args.get("data")
 
