@@ -13,4 +13,4 @@ on if you have integrated UT or not)
 ![Multilevel inheritence with the Context and CommandProcessor classes](https://github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/images/multilevel_inheritance.png)
 
 If things are working, you should be able to do /torture_help in your client, and it'll take you to the user help 
-document!
+document! Please see the [Torture User Client help doc](https://github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/user_help.md).
