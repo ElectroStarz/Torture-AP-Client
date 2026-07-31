@@ -12,4 +12,4 @@ For more information, please see the [Help Guide](https://github.com/ElectroStar
 
 If you would like to request features, please feel free to do so!
 
-* This feature is only compatible with the Torture User Client. If you are a developer, [read here](https://github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/integrating.md) if you want to integrate the Torture User Client with your client.
+\* This feature is only compatible with the Torture User Client. If you are a developer, [read here](https://github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/integrating.md) if you want to integrate the Torture User Client with your client.
