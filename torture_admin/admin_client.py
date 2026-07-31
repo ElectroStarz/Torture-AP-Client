@@ -6,12 +6,14 @@ import os
 import random
 import sys
 import webbrowser
+from typing import Any
 
 from NetUtils import JSONMessagePart
 from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.core.window import Window
 from kivy.properties import StringProperty, BooleanProperty
+from kivy.uix.textinput import TextInput
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.checkbox import CheckBox
@@ -22,7 +24,6 @@ from CommonClient import ClientCommandProcessor, CommonContext, get_base_parser,
 
 logger = logging.getLogger("Client")
 
-
 class TortureDashboard(BoxLayout):
     server_address_text = StringProperty("Server Address: Disconnected")
     password_text = StringProperty("Server Password: ******")
@@ -30,10 +31,11 @@ class TortureDashboard(BoxLayout):
     player_info = StringProperty("Disconnected")
     show_password = BooleanProperty(False)
 
-    def __init__(self, ctx: "TortureClientContext", **kwargs):
+    def __init__(self, ctx: "TortureAdminContext", **kwargs):
         super().__init__(**kwargs)
         self.ctx = ctx
         self.selected_target_players = {}
+        self.selected_pm_players = {}
         self._last_player_count = 0
 
         # Track global mouse position to detect hovering
@@ -65,7 +67,8 @@ class TortureDashboard(BoxLayout):
             self.get_player_info()
 
             if len(self.ctx.player_names) != self._last_player_count:
-                self.populate_player_grid(self.ids.get("player_tg_checkbox_grid"), self.ctx.player_names)
+                self.populate_player_grid(self.ids.get("player_tg_checkbox_grid"), self.ctx.player_names, 1)
+                self.populate_player_grid(self.ids.get("player_pm_checkbox_grid"), self.ctx.player_names, 2)
                 self._last_player_count = len(self.ctx.player_names)
 
     def get_room_info(self):
@@ -82,14 +85,18 @@ class TortureDashboard(BoxLayout):
         """Main function to call when connected to the server/room."""
 
         target_grid = self.ids.get("player_tg_checkbox_grid")
+        pm_grid = self.ids.get("player_pm_checkbox_grid")
 
         # Clear selections
         self.selected_target_players.clear()
 
         if target_grid is not None:
-            self.populate_player_grid(target_grid, self.ctx.player_names)
+            self.populate_player_grid(target_grid, self.ctx.player_names, 1)
 
-    def populate_player_grid(self, grid, player_dict: dict):
+        if target_grid is not None:
+            self.populate_player_grid(pm_grid, self.ctx.player_names, 2)
+
+    def populate_player_grid(self, grid, player_dict: dict, type: int):
         """Handles parsing dictionary data for targeting players."""
         if grid is None:
             return
@@ -103,7 +110,13 @@ class TortureDashboard(BoxLayout):
             if name in ["Archipelago", self.ctx.get_torture_name()]:
                 continue
 
-            self._create_checkbox_row(grid, display_text=name, identifier=slot, callback=self.on_player_target_toggled)
+            if type == 1:
+                callback = self.on_player_target_toggled
+            else:
+                callback = self.on_player_pm_toggled
+
+            self._create_checkbox_row(grid, display_text=name, identifier=slot, callback=callback)
+
 
     @staticmethod
     def _create_checkbox_row(grid, display_text, identifier, callback):
@@ -141,7 +154,11 @@ class TortureDashboard(BoxLayout):
         """Tracks which target player checkboxes are currently active."""
         player_name = self.ctx.player_names.get(slot_id, f"Slot {slot_id}")
         self.selected_target_players[player_name] = is_active
-        print(self.selected_target_players)
+
+    def on_player_pm_toggled(self, slot_id: int, is_active: bool):
+        """Tracks which private message player checkboxes are currently active."""
+        player_name = self.ctx.player_names.get(slot_id, f"Slot {slot_id}")
+        self.selected_pm_players[player_name] = is_active
 
     def send_deathlink(self, reason: str):
         if self.ctx.is_ready():
@@ -152,11 +169,17 @@ class TortureDashboard(BoxLayout):
             checked_players = [name for name, is_checked in self.selected_target_players.items() if is_checked]
             asyncio.create_task(self.ctx.send_traps(checked_players, amount))
 
+    def btn_private_message(self, data: TextInput):
+        if self.ctx.is_ready():
 
-class TortureCommandProcessor(ClientCommandProcessor):
-    ctx: "TortureClientContext"
+            checked_players = [name for name, is_checked in self.selected_pm_players.items() if is_checked]
 
-    def __init__(self, ctx: "TortureClientContext"):
+            self.ctx.private_message(checked_players, data)
+
+class TortureAdminCommandProcessor(ClientCommandProcessor):
+    ctx: "TortureAdminContext"
+
+    def __init__(self, ctx: "TortureAdminContext"):
         super().__init__(ctx)
 
     def _cmd_set_password(self, password: str):
@@ -194,14 +217,14 @@ class TortureCommandProcessor(ClientCommandProcessor):
         webbrowser.open_new_tab("https://www.github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/help.md")
 
 
-class TortureClientContext(CommonContext):
+class TortureAdminContext(CommonContext):
     tags = {"TextOnly", "Deathlink"}
-    game = "Torture Client"
+    game = "Torture Admin Client"
     games_present: list[str] = []
     dashboard: TortureDashboard
-    command_processor = TortureCommandProcessor
+    command_processor = TortureAdminCommandProcessor
 
-    items_handling = 0b111
+    items_handling = 0b000
     want_slot_data = False
 
     def __init__(self, server_address: str | None = None, password: str | None = None) -> None:
@@ -213,7 +236,7 @@ class TortureClientContext(CommonContext):
 
     async def server_auth(self, password_requested: bool = False):
         if password_requested and not self.password:
-            await super(TortureClientContext, self).server_auth(password_requested)
+            await super(TortureAdminContext, self).server_auth(password_requested)
         await self.get_username()
         await self.send_connect()
 
@@ -229,13 +252,10 @@ class TortureClientContext(CommonContext):
         elif cmd == "RoomInfo":
             self.games_present = args.get("games", "Disconnected")
 
-
         elif cmd == "DataPackage":
             self.datapackage = args.get("data")
 
-
         elif cmd == "Retrieved":
-
             if self.torture_password is not None:
                 return
 
@@ -305,11 +325,11 @@ class TortureClientContext(CommonContext):
     def make_gui(self):
         """Overrides Archipelago's GUI builder to add custom tab."""
 
-        kv_file_path = os.path.join(os.path.dirname(__file__), "dashboard.kv")
+        kv_file_path = os.path.join(os.path.dirname(__file__), "admin_dashboard.kv")
         Builder.load_file(kv_file_path)
 
         class TortureTextManager(GameManager):
-            base_title = "Torture Client"
+            base_title = "Archipelago Torture Admin Client | AP Version"
 
             def build(self):
                 container = super().build()
@@ -383,13 +403,15 @@ class TortureClientContext(CommonContext):
             trap_names = [name for name in game_items.keys() if "trap" in name.casefold()]
 
             if not trap_names:
-                logger.info(f"No trap items found in the DataPackage for {game_name}.")
+                text = f"Failed to send to {player}. No trap items found in the DataPackage for {game_name}."
+                message: JSONMessagePart = {"type": "color", "text": text, "color": "red"}
+                self.ui.print_json([message]) if self.ui else None
+                checked_players.remove(player) if checked_players else None
                 continue
 
             # Pick a random trap from their game's pool
             chosen_trap = random.choice(trap_names)
             traps_to_give.append(chosen_trap)
-            #logger.info(f"Selected '{chosen_trap}' for {player}.")
 
         logger.info("Sending traps to...")
         for player, trap in zip(players_chosen, traps_to_give):
@@ -403,20 +425,30 @@ class TortureClientContext(CommonContext):
                 self.ui.print_json(json_message)
 
         await asyncio.sleep(2)
-        message = f"Cursing {', '.join(players_chosen[:len(players_chosen) - 1])} and {players_chosen[-1]}!"
-        asyncio.create_task(self.send_msgs([{"cmd": "Say", "text": message}]))
+        text_message = f"Cursing {', '.join(players_chosen[:len(players_chosen) - 1])} and {players_chosen[-1]}!"
+        asyncio.create_task(self.send_msgs([{"cmd": "Say", "text": text_message}]))
         await asyncio.sleep(2)
 
         for player, trap in zip(players_chosen, traps_to_give):
             command = f"!admin /send {player} {trap}"
             asyncio.create_task(self.send_msgs([{"cmd": "Say", "text": command}]))
 
+    def private_message(self, slots:list[str], data: TextInput|Any = Any):
+        ids = []
 
-def launch_torture_client(*args):
-    Utils.init_logging("Torture Client")
+        for slot in slots:
+            slot_num = next((k for k, v in self.player_names.items() if v == slot), None)
+            ids.append(slot_num)
+
+        message: list[JSONMessagePart] = [{"text": data}]
+        self.ui.print_json(message)
+
+
+def launch_torture_admin_client(*args):
+    Utils.init_logging("Torture Admin Client")
 
     async def main(main_args):
-        ctx = TortureClientContext(main_args.connect, main_args.password)
+        ctx = TortureAdminContext(main_args.connect, main_args.password)
         ctx.auth = main_args.name
         ctx.server_task = asyncio.create_task(server_loop(ctx), name="Server Loop")
 
@@ -429,7 +461,7 @@ def launch_torture_client(*args):
 
     import colorama
 
-    parser = get_base_parser(description="Torture Archipelago Client.")
+    parser = get_base_parser(description="Archipelago Torture Admin Client.")
     parser.add_argument("--name", default=None, help="Slot Name to connect as.")
     parser.add_argument("url", nargs="?", help="Archipelago connection url")
 
@@ -441,4 +473,4 @@ def launch_torture_client(*args):
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    launch_torture_client(*sys.argv[1:])
+    launch_torture_admin_client(*sys.argv[1:])

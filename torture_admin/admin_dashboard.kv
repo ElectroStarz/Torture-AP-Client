@@ -111,7 +111,7 @@
                         id: deathlink_reason
                         multiline: True
                         size_hint_y: None
-                        height: '40dp'
+                        height: '60dp'
                         hint_text: "Deathlink Reason"
 
                     Button:
@@ -124,7 +124,7 @@
                         id: trap_send_amount
                         size_hint_y: None
                         height: '40dp'
-                        hint_text: "Number of people to send traps to"
+                        hint_text: "Number of Trap Recipients"
 
                     Button:
                         text: "Send Traps"
@@ -137,12 +137,9 @@
                         height: '100dp'  # Pushes the buttons to the top
 
             # --- TARGET PLAYERS SECTION ---
-            Label:
+            Subheading:
                 text: "Target Players"
-                font_size: '16sp'
-                bold: True
-                size_hint_y: None
-                height: '30dp'
+                halign: 'center'
 
             ScrollView:
                 size_hint_y: None
@@ -154,4 +151,53 @@
                     spacing: 5
                     size_hint_y: None
                     height: self.minimum_height
+
+            # --- PRIVATE MESSAGE SECTION ---
+            Subheading:
+                text: "Private Message"
+                halign: 'center'
+
+            BoxLayout:
+                orientation: 'horizontal'
+                spacing: 20
+                size_hint_y: None
+                height: '200dp'
+
+                # Players to Message Sub-column
+                BoxLayout:
+                    orientation: 'vertical'
+
+                    Label:
+                        text: "Players to Message"
+                        font_size: '16sp'
+                        bold: True
+                        size_hint_y: None
+                        height: '30dp'
+
+                    ScrollView:
+                        GridLayout:
+                            id: player_pm_checkbox_grid
+                            cols: 2
+                            spacing: 5
+                            size_hint_y: None
+                            height: self.minimum_height
+
+                # Send Private Message Button
+                BoxLayout:
+                    orientation: 'vertical'
+
+                    TextInput:
+                        id: pm_message
+                        size_hint_y: None
+                        multiline: True
+                        height: '100dp'
+                        hint_text: "Enter Message Here"
+
+                    Button:
+                        text: "Send Private Message"
+                        size_hint_y: None
+                        height: '40dp'
+                        on_release: root.btn_private_message(pm_message)
+
+
 
