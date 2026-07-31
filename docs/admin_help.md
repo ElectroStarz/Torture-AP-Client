@@ -1,7 +1,7 @@
-# ElectroStarz's Guide to Torture
+# Torture Admin Client
 
-Greetings, I assume you are here because you either typed /torture_help, or just saw this document in the Github repo.
-Either way, here's a guide on how to use the client.
+Greetings, I assume you are here because you either typed /torture_help in the admin client, or just saw this document 
+in the GitHub repo. Either way, here's a guide on how to use the client.
 
 ## Generating and connecting to a room
 When using the Torture Client, you will be required to place a yaml for the torture client in your players folder. No
@@ -15,8 +15,8 @@ This password can be changed with /set_password
 This client does require admin permissions to give out traps. You can set the server password in the console by doing /option
 server_password {password}. Then in the client you can do !admin login {password}
 
-***THE TORTURE CLIENT DOES NOT GUARANTEE THAT A PLAYER CANNOT USE IT HOWEVER ANY SECURITY SUGGESTIONS WILL BE GLADLY
-ACCEPTED***
+***THE TORTURE ADMIN CLIENT DOES NOT GUARANTEE THAT A PLAYER CANNOT USE IT HOWEVER ANY SECURITY SUGGESTIONS WILL BE 
+GREATLY APPRECIATED***
 
 ## Interfacing with the client
 As usual, you have every feature the text client has, just a normal client. Or is it? Like UT, you'll see there is a new
@@ -35,5 +35,14 @@ have just selected people, it will send traps to them.
 
 The trap sending may not be perfect, this checks the item_name_to_id in the datapackage for items that have the word
 "Trap" (case-insensitive) in them.
+
+Now below that you will see a private message subheading! This will log directly to the client whatever you type and 
+send! However, this is a feature only supported by the Torture **User** Client, see
+[here](https://github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/integrating.md) to integrate it with your
+client. 
+
+You can even use [JSONMessagePart](https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/network%20protocol.md#JSONMessagePart)
+with this! If you want a piece of text (or all) to be in colour, simply type {color: insert colour here, text:
+insert text here}
 
 Have a suggestion? Feel free to ping @electrostarz and I'll reply as soon as possible!

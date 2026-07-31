@@ -88,6 +88,7 @@
 
                     Label:
                         text: root.player_info
+                        markup: True
                         font_size: '16sp'
                         text_size: self.size
                         halign: 'left'
@@ -184,6 +185,7 @@
 
                 # Send Private Message Button
                 BoxLayout:
+                    id: private_message_box
                     orientation: 'vertical'
 
                     TextInput:

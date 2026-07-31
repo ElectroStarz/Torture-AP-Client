@@ -7,11 +7,12 @@ import random
 import sys
 import webbrowser
 from typing import Any
+import re
 
 from NetUtils import JSONMessagePart
 from kivy.clock import Clock
-from kivy.lang import Builder
 from kivy.core.window import Window
+from kivy.lang import Builder
 from kivy.properties import StringProperty, BooleanProperty
 from kivy.uix.textinput import TextInput
 from kivy.uix.boxlayout import BoxLayout
@@ -34,15 +35,16 @@ class TortureDashboard(BoxLayout):
     def __init__(self, ctx: "TortureAdminContext", **kwargs):
         super().__init__(**kwargs)
         self.ctx = ctx
+        self.ctx.dashboard = self
         self.selected_target_players = {}
         self.selected_pm_players = {}
         self._last_player_count = 0
 
-        # Track global mouse position to detect hovering
-        Window.bind(mouse_pos=self.on_mouse_pos)
-
         # Schedule the info updaters to run every 0.5 seconds
         Clock.schedule_interval(self.update_dashboard, 0.5)
+
+        # Hook up hover detection for the password reveal-on-hover
+        Window.bind(mouse_pos=self.on_mouse_pos)
 
     def on_mouse_pos(self, window, pos):
         if not self.get_root_window():
@@ -115,19 +117,24 @@ class TortureDashboard(BoxLayout):
             else:
                 callback = self.on_player_pm_toggled
 
-            self._create_checkbox_row(grid, display_text=name, identifier=slot, callback=callback)
+                if self.ctx.custom_torture(name):
+                    name = f"[color=#44FF44]{name}[/color]"
+                else:
+                    name = f"[color=#FF4444]{name}[/color]"
 
+            self._create_checkbox_row(grid, display_text=name, identifier=slot, callback=callback)
 
     @staticmethod
     def _create_checkbox_row(grid, display_text, identifier, callback):
         """Helper function for Kivy widget generation"""
-        # Create Player/Game Label
+        # Create Label
         label = Label(
             text=display_text,
             halign='left',
             valign='middle',
             size_hint_y=None,
-            height='30dp'
+            height='30dp',
+            markup=True
         )
         label.bind(size=label.setter('text_size'))
 
@@ -214,24 +221,25 @@ class TortureAdminCommandProcessor(ClientCommandProcessor):
         """Use this command if you're struggling with how to use this"""
 
         logger.info("Check your browser!")
-        webbrowser.open_new_tab("https://www.github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/help.md")
+        webbrowser.open_new_tab("https://github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/admin_help.md")
 
 
 class TortureAdminContext(CommonContext):
-    tags = {"TextOnly", "Deathlink"}
-    game = "Torture Admin Client"
+    tags = {"TextOnly"}
+    game = "Torture Client"
     games_present: list[str] = []
-    dashboard: TortureDashboard
     command_processor = TortureAdminCommandProcessor
 
     items_handling = 0b000
     want_slot_data = False
 
-    def __init__(self, server_address: str | None = None, password: str | None = None) -> None:
+    def __init__(self, dashboard: "TortureDashboard", server_address: str | None = None, password: str | None = None) -> None:
         super().__init__(server_address, password)
+        self.dashboard = dashboard
         self.names = set()
         self.games = set()
         self.datapackage = {}
+        self.player_tags = {}
         self.torture_password = None
 
     async def server_auth(self, password_requested: bool = False):
@@ -251,6 +259,7 @@ class TortureAdminContext(CommonContext):
 
         elif cmd == "RoomInfo":
             self.games_present = args.get("games", "Disconnected")
+            print(args.get("tags", None))
 
         elif cmd == "DataPackage":
             self.datapackage = args.get("data")
@@ -271,6 +280,26 @@ class TortureAdminContext(CommonContext):
                     # Password exists, force the user to enter it
                     asyncio.create_task(self.verify_torture_password(actual_password))
 
+        elif cmd == "PrintJSON":
+            if args.get("type") == "TagsChanged":
+                slot = args.get("slot")
+                tags = args.get("tags", [])
+
+                self.player_tags[slot] = tags
+                if self.dashboard:
+                    Clock.schedule_once(lambda dt: self.dashboard.populate_all_checkboxes())
+
+        elif cmd == "Bounced":
+            data = args.get("data")
+            if data is not None and data.get("action") == "status_reply":
+                slot = data.get("slot")
+                tags = data.get("tags", [])
+
+                if slot is not None:
+                    self.player_tags[slot] = tags
+                    if self.dashboard:
+                        Clock.schedule_once(lambda dt: self.dashboard.populate_all_checkboxes())
+
     async def enforce_torture_password(self):
         """Checks if the torture password exists, and prompts the user to create one."""
 
@@ -287,6 +316,7 @@ class TortureAdminContext(CommonContext):
             "operations": [{"operation": "replace", "value": user_pass}]
         }])
         logger.info(f"Saved '{user_pass}' as password!")
+        self.request_initial_sync()
 
     async def verify_torture_password(self, actual_password: str):
         """Prompts the user using the client's built-in console_input."""
@@ -299,7 +329,7 @@ class TortureAdminContext(CommonContext):
             if user_guess == actual_password:
                 logger.info("Password accepted! Access granted.")
                 self.torture_password = actual_password
-
+                self.request_initial_sync()
                 return True
 
             else:
@@ -310,6 +340,13 @@ class TortureAdminContext(CommonContext):
             "cmd": "Get",
             "keys": ["torture_password"]
         }])
+
+    def get_torture_name(self):
+        if self.slot is not None:
+            slot = self.slot_info[self.slot]
+            return slot.name
+        else:
+            return "Torture Client"
 
     def is_ready(self):
         if self.torture_password is not None:
@@ -339,15 +376,29 @@ class TortureAdminContext(CommonContext):
 
         return TortureTextManager
 
-    def get_torture_name(self):
-        if self.slot is not None:
-            slot = self.slot_info[self.slot]
-            return slot.name
-        else:
-            return "Torture Client"
-
     def load_datapackage(self, games: list):
         asyncio.create_task(self.send_msgs([{"cmd": "GetDataPackage", "games": games}]))
+
+    def custom_torture(self, slot_name: str):
+        """Used for actions that require the Torture User Client, stops them from being sent to regular players."""
+
+        slot_num: int = next(k for k, v in self.player_names.items() if v == slot_name)
+        tags = self.player_tags.get(slot_num, [])
+
+        if "Torture User Client" in tags:
+            return True
+        else:
+            return False
+
+    def request_initial_sync(self):
+        """Sends a bounce packet to ask all other Torture clients for their status."""
+        if self.server:
+            sync_packet = {
+                "cmd": "Bounce",
+                "tags": ["Torture User Client"],
+                "data": {"action": "request_status"}
+            }
+            asyncio.create_task(self.send_msgs([sync_packet]))
 
     async def send_traps(self, checked_players: list[str]|None = None, amount: int | None = None):
         amount = int(amount) if amount else None
@@ -433,15 +484,88 @@ class TortureAdminContext(CommonContext):
             command = f"!admin /send {player} {trap}"
             asyncio.create_task(self.send_msgs([{"cmd": "Say", "text": command}]))
 
-    def private_message(self, slots:list[str], data: TextInput|Any = Any):
-        ids = []
+    def private_message(self, slots: list[str], data: Any):
+        ids: list[int] = []
 
-        for slot in slots:
-            slot_num = next((k for k, v in self.player_names.items() if v == slot), None)
-            ids.append(slot_num)
+        if slots:
+            for slot in slots:
+                if not self.custom_torture(slot):
+                    logger.info(f"Unable to send message to {slot}, they do not have the Torture Client activated!")
+                    continue
 
-        message: list[JSONMessagePart] = [{"text": data}]
-        self.ui.print_json(message)
+                slot_num = next((k for k, v in self.player_names.items() if v == slot), None)
+
+                if slot_num is not None:
+                    ids.append(int(slot_num))
+        else:
+            # Sends to everyone
+            for name in self.names:
+
+                if not self.custom_torture(name):
+                    logger.info(f"Unable to send message to {name}, they do not have the Torture Client activated!")
+                    continue
+
+                slot_num = next((k for k, v in self.player_names.items() if v == name), None)
+
+                if slot_num is not None:
+                    ids.append(int(slot_num))
+
+
+
+        bounce_packet = {
+            "cmd": "Bounce",
+            "slots": ids,
+            "data": {
+                "action": "pm",
+                "content": self.parse_to_json_message(data.text)
+            },
+        }
+        asyncio.create_task(self.send_msgs([bounce_packet]))
+
+    @staticmethod
+    def parse_to_json_message(input_string: str) -> list[dict]:
+        # Find the {...} blocks, but only if they actually contain both 'text:' and 'color:'
+        block_pattern = re.compile(r'\{(?=[^}]*text\s*:)(?=[^}]*color\s*:)([^}]+)\}')
+
+        # This pulls out the keys and values. Using a lookahead here so it
+        # doesn't accidentally split commas that belong inside the actual text
+        pair_pattern = re.compile(r'(text|color)\s*:\s*(.*?)(?=\s*,\s*(?:text|color)\s*:|$)')
+
+        message_parts = []
+        last_end = 0
+
+        for match in block_pattern.finditer(input_string):
+            # Grab any normal text that showed up right before this formatted block
+            plain_text = input_string[last_end:match.start()]
+            if plain_text:
+                message_parts.append({"text": plain_text})
+
+            # Go through the stuff inside the braces and save the properties
+            inner_content = match.group(1)
+            properties = {}
+
+            for pair_match in pair_pattern.finditer(inner_content):
+                key = pair_match.group(1).lower()
+                value = pair_match.group(2).strip()
+                properties[key] = value
+
+            # Build the exact JSONMessagePart dictionary format
+            color_part = {
+                "type": "color",
+                "text": properties.get("text", ""),
+                "color": properties.get("color", "").lower()
+            }
+            message_parts.append(color_part)
+
+            # Keep track of where we left off
+            last_end = match.end()
+
+        # Catch any leftover normal text at the very end of the string
+        remaining_text = input_string[last_end:]
+        if remaining_text:
+            message_parts.append({"text": remaining_text})
+
+        return message_parts
 
 
 def launch_torture_admin_client(*args):

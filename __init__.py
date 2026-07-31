@@ -8,7 +8,7 @@ def run_admin_client(*args: str) -> None:
 
 def run_user_client(*args: str) -> None:
     from .torture_user.user_client import launch_torture_user_client
-    launch(launch_torture_user_client(), name="Torture User Client", args=args)
+    launch(launch_torture_user_client, name="Torture User Client", args=args)
 
 
 components.append(
@@ -30,6 +30,6 @@ components.append(
 
 class TortureWorld(World):
     """Inflict horrible pain and suffering on your friends with this :]"""
-    game = "Torture Admin Client"
+    game = "Torture Client"
     item_name_to_id = {}
     location_name_to_id = {}
