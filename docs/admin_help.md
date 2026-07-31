@@ -4,10 +4,10 @@ Greetings, I assume you are here because you either typed /torture_help in the a
 in the GitHub repo. Either way, here's a guide on how to use the client.
 
 ## Generating and connecting to a room
-When using the Torture Client, you will be required to place a yaml for the torture client in your players folder. No
-locations or items will be generated for it, this just makes sure no one goes into random multiworlds using this. Once
-generated and hosted, you connect like you would with any other client, type in the server address, port and the
-torture client slot name.
+When using the Torture Admin Client, you will be required to place a yaml for the torture client in your players folder.
+No locations or items will be generated for it, this just makes sure no one goes into random multiworlds using this.
+Once generated and hosted, you connect like you would with any other client, type in the server address, port and the
+admin client slot name.
 
 Upon connecting, if you haven't already done so, you will see a prompt to either make a password or enter a password.
 This password can be changed with /set_password
