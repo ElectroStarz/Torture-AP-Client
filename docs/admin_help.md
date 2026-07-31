@@ -24,10 +24,12 @@ tab in the top, "Torture Dashboard". It's recommended to have the client be larg
 skills... But anyway, on the left you will see server and player information. If you have any suggestions as to what should be
 there, please do say.
 
+### Deathlink
 On the right you will see a few boxes. The first 2 are to send a deathlink, with the text input being the reason and the
 box being the send box (Note, the slot name is NOT included in the reason, you will have to type something like "I hate
 you all"). 
 
+### Trap Sending
 Below that there are the send traps options and the target player check boxes. This allows you to send traps to either
 selected or random people. If you put a number without anyone selected, the client will select random people to send
 traps to. If you have a number **and** selected people, it will pick [number]/[selected] people to send traps to. If you
@@ -36,13 +38,19 @@ have just selected people, it will send traps to them.
 The trap sending may not be perfect, this checks the item_name_to_id in the datapackage for items that have the word
 "Trap" (case-insensitive) in them.
 
-Now below that you will see a private message subheading! This will log directly to the client whatever you type and 
+### Log to Clients
+Now below that you will see a Log to Clients subheading! This will log directly to the client whatever you type and 
 send! However, this is a feature only supported by the Torture **User** Client, see
 [here](https://github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/integrating.md) to integrate it with your
-client. 
+client. The names in green are the clients that support this feature.
 
-You can even use [JSONMessagePart](https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/network%20protocol.md#JSONMessagePart)
+You can even use [colours](https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/network%20protocol.md#JSONMessagePart)
 with this! If you want a piece of text (or all) to be in colour, simply type {color: insert colour here, text:
-insert text here}
+insert text here} (Can be either way round)
+
+But what can I do with this? Well, you didn't get this from me, but you can fake hints using this... Although they don't
+appear in Hints tab (I'll try to do that if I can :P), you can also stalk and creep out your players, ah the joy...
+
+Oh and by the way, if you have no one enabled, it'll send the message to everyone it can!
 
 Have a suggestion? Feel free to ping @electrostarz and I'll reply as soon as possible!

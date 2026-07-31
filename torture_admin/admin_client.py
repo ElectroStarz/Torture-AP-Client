@@ -37,7 +37,7 @@ class TortureDashboard(BoxLayout):
         self.ctx = ctx
         self.ctx.dashboard = self
         self.selected_target_players = {}
-        self.selected_pm_players = {}
+        self.selected_log_players = {}
         self._last_player_count = 0
 
         # Schedule the info updaters to run every 0.5 seconds
@@ -165,7 +165,7 @@ class TortureDashboard(BoxLayout):
     def on_player_pm_toggled(self, slot_id: int, is_active: bool):
         """Tracks which private message player checkboxes are currently active."""
         player_name = self.ctx.player_names.get(slot_id, f"Slot {slot_id}")
-        self.selected_pm_players[player_name] = is_active
+        self.selected_log_players[player_name] = is_active
 
     def send_deathlink(self, reason: str):
         if self.ctx.is_ready():
@@ -176,12 +176,12 @@ class TortureDashboard(BoxLayout):
             checked_players = [name for name, is_checked in self.selected_target_players.items() if is_checked]
             asyncio.create_task(self.ctx.send_traps(checked_players, amount))
 
-    def btn_private_message(self, data: TextInput):
+    def btn_log_to_client(self, data: TextInput):
         if self.ctx.is_ready():
 
-            checked_players = [name for name, is_checked in self.selected_pm_players.items() if is_checked]
+            checked_players = [name for name, is_checked in self.selected_log_players.items() if is_checked]
 
-            self.ctx.private_message(checked_players, data)
+            self.ctx.log_to_client(checked_players, data)
 
 class TortureAdminCommandProcessor(ClientCommandProcessor):
     ctx: "TortureAdminContext"
@@ -484,7 +484,7 @@ class TortureAdminContext(CommonContext):
             command = f"!admin /send {player} {trap}"
             asyncio.create_task(self.send_msgs([{"cmd": "Say", "text": command}]))
 
-    def private_message(self, slots: list[str], data: Any):
+    def log_to_client(self, slots: list[str], data: Any):
         ids: list[int] = []
 
         if slots:
