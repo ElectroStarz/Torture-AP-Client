@@ -8,7 +8,7 @@ Currently this client includes:
 * Random / Targeted Trap Sending
 * \* Private Messaging
 
-For more information, please see the [Help Guide](https://github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/admin_help.md) on the GitHub!
+For more information, please see the [Help Guide](https://github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/admin_help.md)!
 
 If you would like to request features, please feel free to do so!
 
