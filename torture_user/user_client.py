@@ -41,7 +41,7 @@ class TortureUserCommandProcessor(ClientCommandProcessor):
         """Use this command if you're struggling with the Torture User Client functions"""
 
         logger.info("Check your browser!")
-        webbrowser.open_new_tab("https://www.github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/help.md")
+        webbrowser.open_new_tab("https://github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/user_help.md")
 
 
 class TortureUserContext(CommonContext):

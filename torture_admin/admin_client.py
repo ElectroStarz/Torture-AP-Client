@@ -223,7 +223,6 @@ class TortureAdminCommandProcessor(ClientCommandProcessor):
         logger.info("Check your browser!")
         webbrowser.open_new_tab("https://github.com/ElectroStarz/Torture-AP-Client/blob/main/docs/admin_help.md")
 
-
 class TortureAdminContext(CommonContext):
     tags = {"TextOnly"}
     game = "Torture Client"
