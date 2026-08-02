@@ -19,6 +19,19 @@
     valign: 'middle'
     text_size: self.size
 
+<LinkDropDown>:
+    Button:
+        text: 'Deathlink'
+        size_hint_y: None
+        height: 44
+        on_release: root.select('Deathlink')
+    Button:
+        text: 'Ring Link'
+        size_hint_y: None
+        height: 44
+        on_release: root.select('Ring Link')
+
+
 <TortureDashboard>:
     orientation: 'vertical'
 
@@ -104,22 +117,24 @@
                     Subheading:
                         text: "Torture Players"
 
-                    Widget:
+                    BoxLayout:
+                        id: link_trap
                         size_hint_y: None
-                        height: '2dp'
+                        height: '40dp'
+
 
                     TextInput:
-                        id: deathlink_reason
+                        id: link_text
                         multiline: True
                         size_hint_y: None
                         height: '60dp'
-                        hint_text: "Deathlink Reason"
+                        hint_text: root.link_hint_text
 
                     Button:
-                        text: "Send Deathlink"
+                        text: "Send Link"
                         size_hint_y: None
                         height: '40dp'
-                        on_release: root.send_deathlink(deathlink_reason.text)
+                        on_release: root.send_link(link_text.text)
 
                     TextInput:
                         id: trap_send_amount
@@ -135,7 +150,7 @@
 
                     Widget:
                         size_hint_y: None
-                        height: '100dp'  # Pushes the buttons to the top
+                        height: '50dp'  # Pushes the buttons to the top
 
             # --- TARGET PLAYERS SECTION ---
             Subheading:

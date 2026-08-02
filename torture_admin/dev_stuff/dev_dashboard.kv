@@ -1,0 +1,220 @@
+# --- Presets ---
+<Heading@Label>:
+    font_size: '22sp'
+    bold: True
+    color: 1, 1, 1, 1
+    size_hint_y: None
+    height: '40dp'
+    halign: 'center'
+    valign: 'top'
+    text_size: self.size
+
+<Subheading@Label>:
+    font_size: '16sp'
+    bold: True
+    color: 0.7, 0.7, 0.9, 1
+    size_hint_y: None
+    height: '30dp'
+    halign: 'left'
+    valign: 'middle'
+    text_size: self.size
+
+<LinkDropDown>:
+    Button:
+        text: 'Deathlink'
+        size_hint_y: None
+        height: 44
+        on_release: root.select('Deathlink')
+    Button:
+        text: 'Ring Link'
+        size_hint_y: None
+        height: 44
+        on_release: root.select('Ring Link')
+
+
+<TortureDashboard>:
+    orientation: 'vertical'
+
+    # Allows entire window to be scrollable
+    ScrollView:
+        do_scroll_x: False
+        do_scroll_y: True
+
+        # --- MAIN CONTAINER ---
+        BoxLayout:
+            orientation: 'vertical'
+            padding: 10
+            spacing: 10
+            size_hint_y: None
+            height: self.minimum_height # Calculates height based on children
+
+            Heading:
+                text: "Torture Dashboard"
+
+            # --- TOP SECTION (Info and Actions) ---
+            BoxLayout:
+                orientation: 'horizontal'
+                spacing: 20
+                size_hint_y: None
+                height: '350dp'
+
+                # --- LEFT COLUMN ---
+                BoxLayout:
+                    orientation: 'vertical'
+                    spacing: 10
+
+                    Subheading:
+                        text: "Server Information"
+
+                    # Server Address
+                    Label:
+                        text: root.server_address_text
+                        font_size: '16sp'
+                        text_size: self.size
+                        halign: 'left'
+                        valign: 'top'
+                        size_hint_y: None
+                        height: '30dp'
+
+                    # Password Label
+                    Label:
+                        id: password_label
+                        text: root.password_text
+                        font_size: '16sp'
+                        size_hint_x: None
+                        width: self.texture_size[0]
+                        size_hint_y: None
+                        height: self.texture_size[1]
+
+                    # Remaining Room Stats
+                    Label:
+                        text: root.room_stats_text
+                        font_size: '16sp'
+                        text_size: self.size
+                        halign: 'left'
+                        valign: 'top'
+                        size_hint_y: None
+                        height: '60dp'
+
+                    Subheading:
+                        text: "Player Information"
+
+                    Label:
+                        text: root.player_info
+                        markup: True
+                        font_size: '16sp'
+                        text_size: self.size
+                        halign: 'left'
+                        valign: 'top'
+                        size_hint_y: None
+                        height: '150dp'
+
+                # --- RIGHT COLUMN ---
+                BoxLayout:
+                    orientation: 'vertical'
+                    spacing: 10
+
+                    Subheading:
+                        text: "Torture Players"
+
+                    BoxLayout:
+                        id: link_trap
+                        size_hint_y: None
+                        height: '40dp'
+
+
+                    TextInput:
+                        id: link_text
+                        multiline: True
+                        size_hint_y: None
+                        height: '60dp'
+                        hint_text: root.link_hint_text
+
+                    Button:
+                        text: "Send Link"
+                        size_hint_y: None
+                        height: '40dp'
+                        on_release: root.send_link(link_text.text)
+
+                    TextInput:
+                        id: trap_send_amount
+                        size_hint_y: None
+                        height: '40dp'
+                        hint_text: "Number of Trap Recipients"
+
+                    Button:
+                        text: "Send Traps"
+                        size_hint_y: None
+                        height: '40dp'
+                        on_release: root.btn_send_traps(trap_send_amount.text)
+
+                    Widget:
+                        size_hint_y: None
+                        height: '50dp'  # Pushes the buttons to the top
+
+            # --- TARGET PLAYERS SECTION ---
+            Subheading:
+                text: "Target Players"
+                halign: 'center'
+
+            ScrollView:
+                size_hint_y: None
+                height: '150dp'
+
+                GridLayout:
+                    id: player_tg_checkbox_grid
+                    cols: 2
+                    spacing: 5
+                    size_hint_y: None
+                    height: self.minimum_height
+
+            # --- LOG TO CLIENT SECTION ---
+            Subheading:
+                text: "Log to Clients"
+                halign: 'center'
+
+            BoxLayout:
+                orientation: 'horizontal'
+                spacing: 20
+                size_hint_y: None
+                height: '200dp'
+
+                # Players to Message Sub-column
+                BoxLayout:
+                    orientation: 'vertical'
+
+                    Label:
+                        text: "Players to Message"
+                        font_size: '16sp'
+                        bold: True
+                        size_hint_y: None
+                        height: '30dp'
+
+                    ScrollView:
+                        GridLayout:
+                            id: player_pm_checkbox_grid
+                            cols: 2
+                            spacing: 5
+                            size_hint_y: None
+                            height: self.minimum_height
+
+                # Log to Client Button
+                BoxLayout:
+                    id: private_message_box
+                    orientation: 'vertical'
+
+                    TextInput:
+                        id: log_message
+                        size_hint_y: None
+                        multiline: True
+                        height: '100dp'
+                        hint_text: "Enter Message Here"
+
+                    Button:
+                        text: "Log to Clients"
+                        size_hint_y: None
+                        height: '40dp'
+                        on_release: root.btn_log_to_client(log_message)
+
+
+
