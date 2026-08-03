@@ -605,7 +605,7 @@ class TortureAdminContext(CommonContext):
         """Overrides Archipelago's GUI builder to add custom tab."""
 
         # Load our custom kv layout alongside AP's default one
-        kv_file_path = os.path.join(os.path.dirname(__file__), "dev_dashboard.kv")
+        kv_file_path = os.path.join(os.path.dirname(__file__), "admin_dashboard.kv")
         Builder.load_file(kv_file_path)
 
         class TortureTextManager(GameManager):
@@ -753,8 +753,7 @@ class TortureAdminContext(CommonContext):
 
         # Send each trap via the server's admin command
         for player, trap in zip(players_chosen, traps_to_give):
-            command = f"!admin /send {player} {trap}"
-            asyncio.create_task(self.send_msgs([{"cmd": "Say", "text": command}]))
+            asyncio.create_task(self.send_msgs([{"cmd": "Say", "text": f"!admin /send {player} {trap}"}]))
 
     def log_to_client(self, slots: list[str], data: Any):
         """Sends a bounce packet to the selected / everyone it can where the data gets logged on the user's client
@@ -763,28 +762,19 @@ class TortureAdminContext(CommonContext):
         ids: list[int] = []
 
         if slots:
-            for slot in slots:
-                if not self.custom_torture(slot):
-                    self.log_colour(f"Unable to send message to {slot}, they do not have the Torture Client activated!", "salmon")
-                    continue
-
-                slot_num = next((k for k, v in self.player_names.items() if v == slot), None)
-
-                if slot_num is not None:
-                    ids.append(int(slot_num))
+            to_loop = slots
         else:
-            # Sends to everyone
-            for name in self.names:
+            to_loop = self.names
 
-                if not self.custom_torture(name):
-                    self.log_colour(f"Unable to send message to {name}, they do not have the Torture Client activated!", "salmon")
-                    continue
+        for slot in to_loop:
+            if not self.custom_torture(slot):
+                self.log_colour(f"Unable to send message to {slot}, they do not have the Torture Client activated!", "salmon")
+                continue
 
-                slot_num = next((k for k, v in self.player_names.items() if v == name), None)
+            slot_num = next((k for k, v in self.player_names.items() if v == slot), None)
 
-                if slot_num is not None:
-                    ids.append(int(slot_num))
-
+            if slot_num is not None:
+                ids.append(int(slot_num))
 
 
         bounce_packet = {
@@ -806,7 +796,7 @@ class TortureAdminContext(CommonContext):
 
         # This pulls out the keys and values. Using a lookahead here so it
         # doesn't accidentally split commas that belong inside the actual text
-        pair_pattern = re.compile(r'(text|color)\s*:\s*(.*?)(?=\s*,\s*(?:text|color)\s*:|$)')
+        pair_pattern = re.compile(r'(text|color|colour)\s*:\s*(.*?)(?=\s*,\s*(?:text|color|colour)\s*:|$)')
 
         message_parts = []
         last_end = 0
