@@ -10,23 +10,23 @@ def run_user_client(*args: str) -> None:
     from .torture_user.user_client import launch_torture_user_client
     launch(launch_torture_user_client, name="Torture User Client", args=args)
 
-icon_paths["AdminIcon"] = f"ap:{__name__}/torture_admin/admin_icon.png"
+icon_paths["TortureAdminIcon"] = f"ap:{__name__}/torture_admin/admin_icon.png"
 components.append(
     Component(
         "Torture Admin Client",
         func=run_admin_client,
         component_type=Type.CLIENT,
-        icon="AdminIcon"
+        icon="TortureAdminIcon"
     )
 )
 
-icon_paths["UserIcon"] = f"ap:{__name__}/torture_user/user_icon.png"
+icon_paths["TortureUserIcon"] = f"ap:{__name__}/torture_user/user_icon.png"
 components.append(
     Component(
         "Torture User Client",
         func=run_user_client,
         component_type=Type.CLIENT,
-        icon="UserIcon"
+        icon="TortureUserIcon"
     )
 )
 
