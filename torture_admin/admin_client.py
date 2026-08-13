@@ -9,6 +9,7 @@ import webbrowser
 import time
 from typing import Any
 import string
+import typing
 import re
 
 from NetUtils import JSONMessagePart
@@ -24,10 +25,14 @@ from kivy.uix.dropdown import DropDown
 from kivy.uix.button import Button
 
 import Utils
+from BaseClasses import MultiWorld, ItemClassification
 from CommonClient import ClientCommandProcessor, CommonContext, get_base_parser, gui_enabled, handle_url_arg, \
     server_loop
 
 logger = logging.getLogger("Client")
+# Cache of game_name -> {item_name: classification} so we're not rebuilding
+# a whole world object every single time someone gets sent a trap
+_classification_cache: dict[str, dict[str, "ItemClassification"] | None] = {}
 
 class TortureDashboard(BoxLayout):
     # These are all bound to widgets in dev_dashboard.kv, so updating them here
@@ -44,6 +49,7 @@ class TortureDashboard(BoxLayout):
         self.ctx = ctx
         # Give the context a reference back to us so on_package() etc. can push updates in
         self.ctx.dashboard = self
+        self.trigger_dropdown = Clock.create_trigger(self.create_link_dropdown)
 
         # Tracks the checked/unchecked state of each player's checkbox by name
         self.selected_target_players = {}
@@ -62,7 +68,6 @@ class TortureDashboard(BoxLayout):
 
         # Schedule the info updaters to run every 0.5 seconds
         Clock.schedule_interval(self.update_dashboard, 0.5)
-        Clock.schedule_once(self.create_link_dropdown, 0.5)
 
         # Hook up hover detection for the password reveal-on-hover
         Window.bind(mouse_pos=self.on_mouse_pos)
@@ -368,7 +373,7 @@ class TortureDashboard(BoxLayout):
 
             checked_players = [name for name, is_checked in self.selected_log_players.items() if is_checked]
 
-            self.ctx.log_to_client(checked_players, data)
+            self.ctx.log_to_client(checked_players, data.text)
 
 class TortureAdminCommandProcessor(ClientCommandProcessor):
     ctx: "TortureAdminContext"
@@ -380,11 +385,11 @@ class TortureAdminCommandProcessor(ClientCommandProcessor):
         """Sets the torture client password"""
 
         if not password:
-            logger.info("You must provide a password!")
+            logger.info("You must provide a password")
             return
 
         if not self.ctx.slot_info or not self.ctx.slot:
-            logger.info("You must be connected to a room first!")
+            logger.info("You must be connected to a room first")
             return
 
         if not self.ctx.is_ready():
@@ -404,6 +409,20 @@ class TortureAdminCommandProcessor(ClientCommandProcessor):
             "operations": [{"operation": "replace", "value": password}]
         }]))
 
+    def _cmd_trap_fallback(self):
+        """Toggles the fallback for trap sending (Off by default)
+
+        Some worlds may not have items with ItemClassification.trap,
+        the fallback is to search for items with 'trap' in them.
+
+        This may not be 100% accurate, enable at your own discretion"""
+
+        self.ctx.trap_fallback = not self.ctx.trap_fallback
+
+        if self.ctx.trap_fallback:
+            logger.info("Trap Fallback Enabled")
+        else:
+            logger.info("Trap Fallback Disabled")
 
     def _cmd_torture_doc(self):
         """Use this command if you're struggling with how to use the Admin Client"""
@@ -414,14 +433,16 @@ class TortureAdminCommandProcessor(ClientCommandProcessor):
     def _cmd_torture_overview(self):
         """Displays an overview of the Torture Dashboard"""
         logger.info(
-            "Player & Server Information: Displays select information about the multiworld\n"
-            "Torture Players: Send different types of links as well as traps to players\n"
-            "Target Players: Target Players for trap sending\n"
-            "Log to Client: Log a message to clients (Works with blue names)"
+            f"Player & Server Information: Displays select information about the multiworld\n"
+            f"Torture Players: Send different types of links as well as traps to players\n"
+            f"Target Players: Target Players for trap sending\n"
+            f"Log to Client: Log a message to clients (Works with blue names)\n"
+            f"Trap Fallback: {self.ctx.trap_fallback}"
         )
 
 class TortureAdminContext(CommonContext):
-    tags = {"TextOnly", "Deathlink"}
+    dashboard: TortureDashboard
+    tags = {"TextOnly", "Deathlink", "RingLink"}
     game = "Torture Client"
     games_present: list[str] = []
     command_processor = TortureAdminCommandProcessor
@@ -436,7 +457,7 @@ class TortureAdminContext(CommonContext):
         # Gets set for real once TortureDashboard is created (see TortureDashboard.__init__).
         # Stays None if the GUI never spins up (e.g. headless/CLI mode), so every access to
         # this needs to check for None first.
-        self.dashboard: "TortureDashboard | None" = None
+        self.dashboard: TortureDashboard | None = None
 
         self.names = set()
         self.games = set()
@@ -444,6 +465,7 @@ class TortureAdminContext(CommonContext):
         self.player_tags = {}
         self.player_status = {}
         self.torture_password = None
+        self.trap_fallback = False
 
     async def server_auth(self, password_requested: bool = False):
         if password_requested and not self.password:
@@ -461,6 +483,9 @@ class TortureAdminContext(CommonContext):
             self.names = {v for k, v in self.player_names.items() if v not in ["Archipelago", self.get_torture_name()]}
             self.games = {v for v in self.games_present if v not in ["Archipelago", "Torture Client"]}
             self.load_datapackage(list(self.games))
+
+            if self.dashboard:
+                self.dashboard.trigger_dropdown()
 
             # Ask the server for the password
             asyncio.create_task(self.get_torture_password())
@@ -488,7 +513,6 @@ class TortureAdminContext(CommonContext):
                     asyncio.create_task(self.verify_torture_password(actual_password))
 
             elif any(key.startswith("_read_client_status_0_") for key in keys_dict):
-                # Guard against no GUI being up yet - dashboard can be None in headless mode
                 if self.dashboard:
                     for key, value in keys_dict.items():
                         self.dashboard.mark_player_status(key, value)
@@ -511,16 +535,17 @@ class TortureAdminContext(CommonContext):
                     self.request_client_status(slot)
 
         elif cmd == "Bounced":
-            data = args.get("data")
-            if data is not None and data.get("action") == "status_reply":
-                slot = data.get("slot")
-                tags = data.get("tags", [])
+            data = args.get("data", None)
+            if data is not None:
+                if data.get("action") == "status_reply":
+                    slot = data.get("slot")
+                    tags = data.get("tags", [])
 
-                if slot is not None:
-                    self.player_tags[slot] = tags
-                    if self.dashboard:
-                        # Defer to next frame so we're not mutating widgets mid-packet-handling
-                        Clock.schedule_once(lambda dt: self.dashboard.populate_all_checkboxes())
+                    if slot is not None:
+                        self.player_tags[slot] = tags
+                        if self.dashboard:
+                            # Defer to next frame so we're not mutating widgets mid-packet-handling
+                            Clock.schedule_once(lambda dt: self.dashboard.populate_all_checkboxes())
 
     async def enforce_torture_password(self):
         """Checks if the torture password exists, and prompts the user to create one."""
@@ -537,7 +562,7 @@ class TortureAdminContext(CommonContext):
             "want_reply": False,
             "operations": [{"operation": "replace", "value": user_pass}]
         }])
-        logger.info(f"Saved '{user_pass}' as password!")
+        self.log_colour(f"Saved '{user_pass}' as password!", "green")
         self.request_torture_status()
 
         # Also ask everyone currently in the room for their status right away
@@ -661,11 +686,107 @@ class TortureAdminContext(CommonContext):
 
         asyncio.create_task(self.send_msgs([packet]))
 
-    async def send_traps(self, checked_players: list[str]|None = None, amount: int | None = None):
+    def _build_world_classifications(self, game_name: str) -> dict[str, ItemClassification] | None:
+        """
+        Does a small generation of the world in the client so we can tell an
+        item's classification. Returns None to fall back to item name method
+        """
+        try:
+            from worlds.AutoWorld import AutoWorldRegister
+        except ImportError:
+            self.log_colour("worlds.AutoWorld not importable; falling back to name matching.", "salmon")
+            return None
+
+        # Registry of every APWorld that's installed locally.
+        # If the game isn't in here we have no way to know real classifications.
+        world_type = AutoWorldRegister.world_types.get(game_name)
+        if world_type is None:
+            self.log_colour(f"No APWorld installed locally for '{game_name}'; falling back to name matching.", "salmon")
+            return None
+
+        try:
+            # Fake a barebones multiworld with just 1 player so we have
+            # somewhere to attach the world object to. We're not actually generating
+            # anything here, just enough scaffolding to call create_item.
+            mw = MultiWorld(1)
+            mw.game[1] = game_name
+            mw.player_name[1] = "Player1"
+
+            try:
+                mw.set_seed()
+            except Exception as e:
+                self.exception_begone(e)
+                pass  # some AP versions don't need/expose this, don't care if it fails
+
+            world = world_type(mw, 1)
+            mw.worlds[1] = world
+
+            try:
+                type_hints: Any = world_type.options_dataclass.type_hints
+
+                world.options = world_type.options_dataclass(**{
+                    opt_name: opt_cls.from_any(opt_cls.default)
+                    for opt_name, opt_cls in type_hints.items()
+                })
+            except Exception as e:
+                logger.debug(f"Could not set default options for {game_name}: {e}")
+
+            # Now the actual point of all this - ask the real world code what
+            # classification every single item name actually has
+            classifications: dict[str, ItemClassification] = {}
+            for item_name in world.item_name_to_id:
+                try:
+                    classifications[item_name] = world.create_item(item_name).classification
+                except Exception as e:
+                    self.exception_begone(e)
+                    # some items need generation state we don't have (progressive
+                    # items, option-dependent stuff etc), just skip those
+                    continue
+
+            if not classifications:
+                return None
+
+            return classifications
+
+        except Exception as e:
+            # Catch-all so one broken/incompatible APWorld doesn't take down
+            # the whole command for every other game
+            logger.debug(f"Failed to build a local world for '{game_name}': {e}")
+            return None
+
+    def get_trap_item_names(self, game_name: str, available_item_names: list[str]) -> list[str]:
+        """
+        Filters a list of item names down to just the ones that are have
+        ItemClassification.trap for this game. Falls back to name checking
+        """
+        # Only build this once per game and reuse it after that
+        if game_name not in _classification_cache:
+            _classification_cache[game_name] = self._build_world_classifications(game_name)
+
+        table = _classification_cache[game_name]
+
+        if table is None and not self.trap_fallback:
+            # No item table & trap fall back is set to false, return nothing
+            return []
+
+        elif table is None and self.trap_fallback:
+            # Couldn't get real data for this game, fall back to old behaviour
+            # so the command still works even if it's less accurate
+            return [name for name in available_item_names if "trap" in name.casefold()]
+
+        else:
+            # & instead of == because ItemClassification is a flag enum - items can
+            # be trap + something else combined, so we just check the bit is set
+            return [
+                name for name in available_item_names
+                if table.get(name, ItemClassification.filler) & ItemClassification.trap
+            ]
+
+    async def send_traps(self, checked_players: list[str] | None = None, amount: int | None = None):
         """Sends traps to random / selected people
         Does not require the User Client"""
 
-        amount = int(amount) if amount and amount > 0 else None
+        amount = amount if amount and amount > 0 else None
 
         if not self.slot:
             return
@@ -689,7 +810,8 @@ class TortureAdminContext(CommonContext):
         elif amount is not None and not checked_players:
             available_players = list(self.names)
             if amount > len(available_players):
-                self.log_colour("Amount of people to trap is more than the amount of people in the multiworld!", "salmon")
+                self.log_colour("Amount of people to trap is more than the amount of people in the multiworld!",
+                                "salmon")
                 return
 
             players_chosen = random.sample(available_players, amount)
@@ -718,21 +840,20 @@ class TortureAdminContext(CommonContext):
 
             game_items = self.datapackage["games"][game_name]["item_name_to_id"]
 
-            # Filter the items to find anything with "trap" in the name (case-insensitive)
-            trap_names = [name for name in game_items.keys() if "trap" in name.casefold()]
+            trap_names = self.get_trap_item_names(game_name, list(game_items.keys()))
 
             if not trap_names:
-                self.log_colour(f"Failed to send to {player}. No trap items found in the DataPackage for {game_name}.", "salmon")
+                self.log_colour(f"Failed to send to {player}. No trap items found for {game_name}.", "salmon")
                 checked_players.remove(player) if checked_players else None
                 continue
 
-            # Pick a random trap from their game's pool
+            # Pick a random trap from their game's actual trap pool
             chosen_trap = random.choice(trap_names)
             traps_to_give.append(chosen_trap)
 
         logger.info("Sending traps to...")
         for player, trap in zip(players_chosen, traps_to_give):
-            json_message: list[JSONMessagePart] = [
+            json_message: list = [
                 {"type": "color", "text": player, "color": "green"},
                 {"text": " <- "},
                 {"type": "color", "text": trap, "color": "salmon"}
@@ -755,7 +876,7 @@ class TortureAdminContext(CommonContext):
         for player, trap in zip(players_chosen, traps_to_give):
             asyncio.create_task(self.send_msgs([{"cmd": "Say", "text": f"!admin /send {player} {trap}"}]))
 
-    def log_to_client(self, slots: list[str], data: Any):
+    def log_to_client(self, slots: list[str], data: str):
         """Sends a bounce packet to the selected / everyone it can where the data gets logged on the user's client
         Requires User Client"""
 
@@ -782,7 +903,7 @@ class TortureAdminContext(CommonContext):
             "slots": ids,
             "data": {
                 "action": "pm",
-                "content": self.parse_to_json_message(data.text)
+                "content": self.parse_to_json_message(data)
             },
         }
         asyncio.create_task(self.send_msgs([bounce_packet]))
@@ -791,12 +912,12 @@ class TortureAdminContext(CommonContext):
     def parse_to_json_message(input_string: str) -> list[dict]:
         """Used to find curly braces for coloured text and formats it accordingly"""
 
-        # Find the {...} blocks, but only if they actually contain both 'text:' and 'color:'
-        block_pattern = re.compile(r'\{(?=[^}]*text\s*:)(?=[^}]*color\s*:)([^}]+)\}')
+        # Find the {...} blocks, but only if they actually contain both 'text:' and 'colour:|color:'
+        block_pattern = re.compile(r'\{(?=[^}]*text\s*:)(?=[^}]*(color|colour)\s*:)([^}]+)')
 
         # This pulls out the keys and values. Using a lookahead here so it
         # doesn't accidentally split commas that belong inside the actual text
-        pair_pattern = re.compile(r'(text|color|colour)\s*:\s*(.*?)(?=\s*,\s*(?:text|color|colour)\s*:|$)')
+        pair_pattern = re.compile(r'(text|color|colour)\s*:\s*(.*?)(?=\s*,\s*(?:text|color|colour)\s*:|$)\}')
 
         message_parts = []
         last_end = 0
@@ -820,7 +941,7 @@ class TortureAdminContext(CommonContext):
             color_part = {
                 "type": "color",
                 "text": properties.get("text", ""),
-                "color": properties.get("color", "").lower()
+                "color": properties.get("color", "").casefold()
             }
             message_parts.append(color_part)
 
@@ -833,6 +954,11 @@ class TortureAdminContext(CommonContext):
             message_parts.append({"text": remaining_text})
 
         return message_parts
+
+    def exception_begone(self, text):
+        """Literally does nothing with an exception, just
+        to get rid of the too broad exception error"""
+        pass
 
 
 def launch_torture_admin_client(*args):
