@@ -87,8 +87,12 @@ class TortureUserContext(CommonContext):
         super().on_package(cmd, args)
 
         if cmd == "Bounced":
-            data = args["data"]
-            action = data["action"]
+            data = args.get("data", None)
+
+            if data is not None:
+                action = data.get("action", "")
+            else:
+                action = ""
 
             if action == "pm":
                 if self.ui:
@@ -145,7 +149,6 @@ class TortureUserContext(CommonContext):
 
         return super().on_print_json(args)
 
-
     async def disconnect(self, allow_autoreconnect: bool = False):
         await super().disconnect(allow_autoreconnect)
 
@@ -161,6 +164,8 @@ def launch_torture_user_client(*args):
         ctx = TortureUserContext(main_args.connect, main_args.password)
         ctx.auth = main_args.name
         ctx.server_task = asyncio.create_task(server_loop(ctx), name="Server Loop")
+        # We're launching from the component, not importing so we
+        # can assume the user will want the Torture functionality
         ctx.torture = True
         ctx.tags.add("Torture User Client")
 
