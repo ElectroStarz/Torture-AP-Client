@@ -2,7 +2,7 @@ from kvui import GameManager
 import asyncio
 import logging
 import multiprocessing
-import os
+import importlib.resources
 import random
 import sys
 import webbrowser
@@ -490,7 +490,6 @@ class TortureAdminContext(CommonContext):
             # Ask the server for the password
             asyncio.create_task(self.get_torture_password())
 
-
         elif cmd == "RoomInfo":
             self.games_present = args.get("games", "Disconnected")
             #print(args.get("tags", None))
@@ -629,9 +628,9 @@ class TortureAdminContext(CommonContext):
     def make_gui(self):
         """Overrides Archipelago's GUI builder to add custom tab."""
 
-        # Load our custom kv layout alongside AP's default one
-        kv_file_path = os.path.join(os.path.dirname(__file__), "admin_dashboard.kv")
-        Builder.load_file(kv_file_path)
+        # Load our custom kv layout alongside AP's default one.
+        kv_text = importlib.resources.files(__package__).joinpath("admin_dashboard.kv").read_text(encoding="utf-8")
+        Builder.load_string(kv_text)
 
         class TortureTextManager(GameManager):
             base_title = "Archipelago Torture Admin Client | AP Version"
@@ -639,7 +638,7 @@ class TortureAdminContext(CommonContext):
             def build(self):
                 container = super().build()
 
-                # This is what actually creates the TortureDashboard and wires up self.ctx.dashboard
+                # This is what actually creates the TortureDashboard and wires up the dashboard
                 self.add_client_tab("Torture Dashboard", TortureDashboard(self.ctx))
                 return container
 
@@ -955,7 +954,7 @@ class TortureAdminContext(CommonContext):
 
         return message_parts
 
-    def exception_begone(self, text):
+    def exception_begone(self, exception):
         """Literally does nothing with an exception, just
         to get rid of the too broad exception error"""
         pass
