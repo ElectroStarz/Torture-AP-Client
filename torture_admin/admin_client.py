@@ -417,6 +417,7 @@ class TortureAdminCommandProcessor(ClientCommandProcessor):
 
         This may not be 100% accurate, enable at your own discretion"""
 
+        # Reverse the bool
         self.ctx.trap_fallback = not self.ctx.trap_fallback
 
         if self.ctx.trap_fallback:
@@ -467,6 +468,8 @@ class TortureAdminContext(CommonContext):
         self.torture_password = None
         self.trap_fallback = False
 
+        self.force_lock = False
+
     async def server_auth(self, password_requested: bool = False):
         if password_requested and not self.password:
             await super(TortureAdminContext, self).server_auth(password_requested)
@@ -483,6 +486,8 @@ class TortureAdminContext(CommonContext):
             self.names = {v for k, v in self.player_names.items() if v not in ["Archipelago", self.get_torture_name()]}
             self.games = {v for v in self.games_present if v not in ["Archipelago", "Torture Client"]}
             self.load_datapackage(list(self.games))
+
+            print(self.slot_info)
 
             if self.dashboard:
                 self.dashboard.trigger_dropdown()
@@ -502,16 +507,16 @@ class TortureAdminContext(CommonContext):
             keys_dict = args.get("keys", {})
 
             if "torture_password" in keys_dict and self.torture_password is None:
-                actual_password = keys_dict.get("torture_password")
+                actual_password = keys_dict.get("torture_password", None)
 
                 if actual_password is None:
                     # Password doesn't exist on the server yet
-                    asyncio.create_task(self.enforce_torture_password())
+                    asyncio.create_task(self.create_torture_password())
                 else:
                     # Password exists, force the user to enter it
                     asyncio.create_task(self.verify_torture_password(actual_password))
 
-            elif any(key.startswith("_read_client_status_0_") for key in keys_dict):
+            elif any(key.startswith("_read_client_status_") for key in keys_dict):
                 if self.dashboard:
                     for key, value in keys_dict.items():
                         self.dashboard.mark_player_status(key, value)
@@ -536,17 +541,16 @@ class TortureAdminContext(CommonContext):
         elif cmd == "Bounced":
             data = args.get("data", None)
             if data is not None:
-                if data.get("action") == "status_reply":
+                if data.get("action", "") == "status_reply":
                     slot = data.get("slot")
                     tags = data.get("tags", [])
 
                     if slot is not None:
                         self.player_tags[slot] = tags
                         if self.dashboard:
-                            # Defer to next frame so we're not mutating widgets mid-packet-handling
                             Clock.schedule_once(lambda dt: self.dashboard.populate_all_checkboxes())
 
-    async def enforce_torture_password(self):
+    async def create_torture_password(self):
         """Checks if the torture password exists, and prompts the user to create one."""
 
         logger.info("Please enter a password for the Torture Client")
@@ -566,7 +570,7 @@ class TortureAdminContext(CommonContext):
 
         # Also ask everyone currently in the room for their status right away
         for slot in self.player_names:
-            if self.slot_concerns_self(slot):
+            if not self.slot_concerns_self(slot):
                 self.request_client_status(slot)
 
     async def verify_torture_password(self, actual_password: str):
@@ -619,8 +623,12 @@ class TortureAdminContext(CommonContext):
         self.player_status.clear()
         self.torture_password = None
 
-        # Wipe the player checkboxes too, otherwise the old room's players stick around on screen
+        # Wipe the Dashboard too, otherwise the old room's players stick around on screen
         if self.dashboard:
+            self.dashboard.server_address_text = "Server Address: Disconnected"
+            self.dashboard.password_text = "Server Password: ******"
+            self.dashboard.room_stats_text = "Player Count: Disconnected\nHint Cost: Disconnected"
+            self.dashboard.player_info = "Disconnected"
             self.dashboard.clear_all_rows()
 
         await super().disconnect(allow_autoreconnect)
@@ -677,7 +685,6 @@ class TortureAdminContext(CommonContext):
 
     def request_client_status(self, slot):
         """Sends a Get packet to the server for the slot's ClientStatus"""
-
         packet = {
             "cmd": "Get",
             "keys": [f"_read_client_status_0_{slot}"],
@@ -821,20 +828,25 @@ class TortureAdminContext(CommonContext):
         traps_to_give = []
 
         for player in players_chosen:
-            slot_num = next((k for k, v in self.player_names.items() if v == player), None)
+            slot_num, slot_name = (k, v for k, v in self.player_names.items() if v == player)
             if not slot_num:
                 continue
 
             # Get the game this player is playing from slot_info
-            slot_data = self.slot_info.get(slot_num)
+            slot_data = self.slot_info.get(slot_num[0])
             if not slot_data:
+                self.log_colour(f"Unable to get slot data for player '{slot_name[0]}'", "salmon")
+                if checked_players:
+                    checked_players.remove(player)
                 continue
 
             game_name = slot_data.game
 
             # Access datapackage for their game
             if not self.datapackage:
-                self.log_colour(f"DataPackage not loaded.", "salmon")
+                self.log_colour(f"DataPackage not loaded for game '{game_name}'", "salmon")
+                if checked_players:
+                    checked_players.remove(player)
                 continue
 
             game_items = self.datapackage["games"][game_name]["item_name_to_id"]
@@ -843,7 +855,8 @@ class TortureAdminContext(CommonContext):
 
             if not trap_names:
                 self.log_colour(f"Failed to send to {player}. No trap items found for {game_name}.", "salmon")
-                checked_players.remove(player) if checked_players else None
+                if checked_players:
+                    checked_players.remove(player)
                 continue
 
             # Pick a random trap from their game's actual trap pool
@@ -896,15 +909,18 @@ class TortureAdminContext(CommonContext):
             if slot_num is not None:
                 ids.append(int(slot_num))
 
+        parsed = self.parse_to_json_message(data)
 
         bounce_packet = {
             "cmd": "Bounce",
             "slots": ids,
             "data": {
                 "action": "pm",
-                "content": self.parse_to_json_message(data)
+                "content": parsed
             },
         }
+        print(f"Parsed={parsed}")
+
         asyncio.create_task(self.send_msgs([bounce_packet]))
 
     @staticmethod
